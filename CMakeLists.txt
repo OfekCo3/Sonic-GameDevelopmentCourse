@@ -14,6 +14,8 @@ add_executable(BAGEL main.cpp
         Sonic.h
         )
 
+
+
 set(SDL_STATIC ON)
 set(SDL_SHARED OFF)
 add_subdirectory(lib/SDL)
@@ -36,7 +38,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC box2d)
 add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E
-        copy_directory_if_different
+        copy_directory
         "${PROJECT_SOURCE_DIR}/res"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/res"
 )
