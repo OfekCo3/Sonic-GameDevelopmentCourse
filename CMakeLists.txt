@@ -10,7 +10,9 @@ add_executable(BAGEL main.cpp
         bagel.h
         tests.cpp
         bagel_cfg.h
-)
+        Sonic.cpp
+        Sonic.h
+        )
 
 set(SDL_STATIC ON)
 set(SDL_SHARED OFF)
@@ -18,6 +20,7 @@ add_subdirectory(lib/SDL)
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL3-static)
 
 set(BUILD_SHARED_LIBS OFF)
+set(SDL3IMAGE_PNG ON)
 add_subdirectory(lib/SDL_image)
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL3_image-static)
 
@@ -34,6 +37,12 @@ add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E
         copy_directory_if_different
-            "${PROJECT_SOURCE_DIR}/res"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/res"
+        "${PROJECT_SOURCE_DIR}/res"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/res"
 )
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+        ${CMAKE_SOURCE_DIR}/lib/SDL/include
+        ${CMAKE_SOURCE_DIR}/lib/SDL_image/include
+        ${CMAKE_SOURCE_DIR}/lib/SDL_image/include/SDL3_image
+        )
