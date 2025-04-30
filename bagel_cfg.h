@@ -13,7 +13,7 @@ constexpr Bagel Params{
     BAGEL_STORAGE(SonicGame::Health, SparseStorage)
     BAGEL_STORAGE(SonicGame::PlayerTag, TaggedStorage)
     BAGEL_STORAGE(SonicGame::EnemyTag, TaggedStorage)
-    BAGEL_STORAGE(SonicGame::RingCollectorTag, TaggedStorage)
+    BAGEL_STORAGE(SonicGame::CollectorTag, TaggedStorage)
     BAGEL_STORAGE(SonicGame::RingCount, SparseStorage)
     BAGEL_STORAGE(SonicGame::CollectableTag, TaggedStorage)
     BAGEL_STORAGE(SonicGame::CollisionInfo, PackedStorage)

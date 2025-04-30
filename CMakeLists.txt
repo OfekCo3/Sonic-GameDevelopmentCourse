@@ -12,7 +12,7 @@ add_executable(BAGEL main.cpp
         bagel_cfg.h
         Sonic.cpp
         Sonic.h
-        )
+        Game.cpp Game.h)
 
 
 
