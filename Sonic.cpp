@@ -1,114 +1,139 @@
-//
-// Created by User on 25/04/2025.
-//
-
 #include "Sonic.h"
-#include <SDL3_image/SDL_image.h>
 #include <iostream>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
+#include <box2d/box2d.h>
+using namespace std;
 
-Sonic::Sonic(SDL_Renderer* renderer)
+Sonic::Sonic()
 {
-    SDL_Surface* surf = IMG_Load("res/sonic_sprite.png");
-    if (!surf) {
-        std::cerr << "Failed to load sprite: " << SDL_GetError() << std::endl;
+    // Initialize SDL
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        cout << SDL_GetError() << endl;
         return;
     }
 
-    tex = SDL_CreateTextureFromSurface(renderer, surf);
-    SDL_DestroySurface(surf);
-    if (!tex) {
-        std::cerr << "Failed to create texture: " << SDL_GetError() << std::endl;
+    // Create the window and renderer
+    if (!SDL_CreateWindowAndRenderer(
+            "Sonic Game", 800, 600, 0, &win, &ren)) {
+        cout << SDL_GetError() << endl;
         return;
     }
 
+    // Load Sonic texture
+    SDL_Surface* walkSurf = IMG_Load("res/245841-removebg-preview.png");
+    if (walkSurf == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+    // Load walking sprite sheet
+    walkingTex = SDL_CreateTextureFromSurface(ren, walkSurf);
+    if (walkingTex == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+    SDL_DestroySurface(walkSurf);
+
+    // Create the physics world with normal gravity
     b2WorldDef worldDef = b2DefaultWorldDef();
-    worldDef.gravity = { 0, 0 };
+    worldDef.gravity = { 0.0f, 9.8f };
     world = b2CreateWorld(&worldDef);
 
-    b2BodyDef bodyDef = b2DefaultBodyDef();
-    bodyDef.type = b2_dynamicBody;
-    bodyDef.position = { 400 / BOX_SCALE, 300 / BOX_SCALE };
-    body = b2CreateBody(world, &bodyDef);
+    // Create Sonic's body
+    b2BodyDef sonicBodyDef = b2DefaultBodyDef();
+    sonicBodyDef.type = b2_dynamicBody;
+    sonicBodyDef.position = { 100 / BOX_SCALE, 500 / BOX_SCALE };
+    ballBody = b2CreateBody(world, &sonicBodyDef);
 
-    b2ShapeDef shapeDef = b2DefaultShapeDef();
-    shapeDef.density = 1;
-    shapeDef.material.friction = 0.f;
-    shapeDef.material.restitution = 1.5f;
+    // Define Sonic's shape
+    b2ShapeDef sonicShapeDef = b2DefaultShapeDef();
+    sonicShapeDef.density = 1.0f;
+    sonicShapeDef.material.friction = 0.5f;
+    sonicShapeDef.material.restitution = 0.0f;
+    b2Circle sonicCircle = { 0, 0, SONIC_TEX.w * TEX_SCALE / BOX_SCALE };
+    b2CreateCircleShape(ballBody, &sonicShapeDef, &sonicCircle);
 
-    b2Circle circle = { 0, 0, 40 * TEX_SCALE / BOX_SCALE };
-    b2CreateCircleShape(body, &shapeDef, &circle);
+    // Create the ground (floor)
+    b2BodyDef floorBodyDef = b2DefaultBodyDef();
+    floorBodyDef.type = b2_staticBody;
+    floorBodyDef.position = { 800 / 2 / BOX_SCALE, 600 / BOX_SCALE };
+    b2BodyId floorBody = b2CreateBody(world, &floorBodyDef);
 
-    b2Body_SetLinearVelocity(body, { 2, -3 });
-    b2Body_SetAngularVelocity(body, 1.2f);
-
-    loadAnimations();
+    b2Polygon groundBox = b2MakeBox(800 / 2 / BOX_SCALE, 1.0f);
+    b2CreatePolygonShape(floorBody, &sonicShapeDef, &groundBox);
 }
 
 Sonic::~Sonic()
 {
-    if (tex) SDL_DestroyTexture(tex);
-    b2DestroyWorld(world);
+    if (walkingTex != nullptr)
+        SDL_DestroyTexture(walkingTex);
+    if (ren != nullptr)
+        SDL_DestroyRenderer(ren);
+    if (win != nullptr)
+        SDL_DestroyWindow(win);
+
+    SDL_Quit();
 }
 
-void Sonic::loadAnimations()
+void Sonic::run()
 {
-    const int spriteWidth = 750;
-    const int spriteHeight = 685;
-    const int rowHeight = spriteHeight / 8;
+    SDL_SetRenderDrawColor(ren, 135, 206, 235, 255);
+    SDL_RenderClear(ren);
+    SDL_FRect sonicRect{ 0, 0, SONIC_TEX.w * TEX_SCALE, SONIC_TEX.h * TEX_SCALE };
 
-    animations[AnimationState::Idle].frameDelay = 6;
-    animations[AnimationState::Run].frameDelay = 4;
-    animations[AnimationState::SuperRun].frameDelay = 3;
-    animations[AnimationState::Roll].frameDelay = 3;
-    animations[AnimationState::Jump].frameDelay = 5;
+    constexpr float STEP_TIME = 1.f / FPS;
+    constexpr float RAD_TO_DEG = 57.2958f;
 
-    std::vector<std::pair<AnimationState, std::pair<int, int>>> config = {
-            { AnimationState::Idle, {0, 15} },
-            { AnimationState::Run, {2, 14} },
-            { AnimationState::SuperRun, {3, 14} },
-            { AnimationState::Roll, {6, 10} },
-            { AnimationState::Jump, {7, 10} }
-    };
+    for (int frame = 0; frame < 1000; ++frame) {
+        // Physics update
+        b2World_Step(world, STEP_TIME, 4);
 
-    for (auto& [state, row_frames] : config) {
-        int row = row_frames.first;
-        int count = row_frames.second;
-        int frameWidth = spriteWidth / count;
-        for (int i = 0; i < count; ++i) {
-            SDL_FRect frame = {
-                    static_cast<float>(i * frameWidth),
-                    static_cast<float>(row * rowHeight),
-                    static_cast<float>(frameWidth),
-                    static_cast<float>(rowHeight)
-            };
-            animations[state].frames.push_back(frame);
+        // Sonic moves right by setting x velocity
+        b2Vec2 sonicVelocity = b2Body_GetLinearVelocity(ballBody);
+        sonicVelocity.x = 2.0f;
+        b2Body_SetLinearVelocity(ballBody, sonicVelocity);
+
+        // Get Sonic's new position
+        b2Vec2 sonicPosition = b2Body_GetPosition(ballBody);
+        sonicRect.x = sonicPosition.x * BOX_SCALE;
+        sonicRect.y = sonicPosition.y * BOX_SCALE - (SONIC_TEX.h * TEX_SCALE / 2);
+
+//        // Get Sonic's rotation
+//        b2Rot sonicRotation = b2Body_GetRotation(ballBody);
+//        float sonicAngle = RAD_TO_DEG * b2Rot_GetAngle(sonicRotation);
+
+        // Rendering
+        SDL_RenderClear(ren);
+
+        // Animate Sonic walking
+        frameCounter++;
+        if (frameCounter >= 5) { // slows animation speed
+            currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+            frameCounter = 0;
         }
+
+        SDL_FRect srcFrameF = {
+                SONIC_TEX.x + currentFrame * SONIC_TEX.w,
+                SONIC_TEX.y,
+                SONIC_TEX.w,
+                SONIC_TEX.h
+        };
+
+        SDL_FRect destRect = {
+                sonicRect.x,
+                sonicRect.y,
+                SONIC_TEX.w * TEX_SCALE,
+                SONIC_TEX.h * TEX_SCALE
+        };
+
+        SDL_RenderTexture(ren, walkingTex, &srcFrameF, &destRect);
+
+//        SDL_RenderTextureRotated(
+//                ren, tex, &SONIC_TEX, &sonicRect, sonicAngle,
+//                nullptr, SDL_FLIP_NONE);
+
+        SDL_RenderPresent(ren);
+
+        SDL_Delay(5);
     }
-}
-
-void Sonic::update()
-{
-    if (++frameTimer >= animations[currentState].frameDelay) {
-        frameTimer = 0;
-        currentFrame = (currentFrame + 1) % animations[currentState].frames.size();
-    }
-
-    b2World_Step(world, 1.0f / 60.0f, 4);
-}
-
-void Sonic::render(SDL_Renderer* renderer)
-{
-    b2Vec2 pos = b2Body_GetPosition(body);
-    b2Rot rot = b2Body_GetRotation(body);
-    float angle = 57.2958f * b2Rot_GetAngle(rot);
-
-    const SDL_FRect& src = animations[currentState].frames[currentFrame];
-    SDL_FRect dest = {
-            pos.x * BOX_SCALE,
-            pos.y * BOX_SCALE,
-            src.w * TEX_SCALE,
-            src.h * TEX_SCALE
-    };
-
-    SDL_RenderTextureRotated(renderer, tex, &src, &dest, angle, nullptr, SDL_FLIP_NONE);
 }
