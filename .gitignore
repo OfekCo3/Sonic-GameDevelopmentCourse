@@ -1,0 +1,20 @@
+# IDEs
+.idea/
+
+# Build files
+cmake-build-debug/
+out/
+build/
+*.obj
+*.exe
+*.log
+*.tmp
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Others
+*.user
