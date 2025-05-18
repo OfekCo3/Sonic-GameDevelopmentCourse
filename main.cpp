@@ -3,6 +3,8 @@
 #include <box2d/box2d.h>
 #include <iostream>
 #include <vector>
+#include <cmath>
+#include "Game.h"
 
 using namespace std;
 
@@ -33,6 +35,13 @@ struct Ring {
     float animPhase;
 };
 
+struct Enemy {
+    b2BodyId body;
+    SDL_FRect texRect;
+    bool movingRight;
+};
+
+
 class Sonic {
 public:
     Sonic();
@@ -50,6 +59,11 @@ private:
     std::vector<Ring> rings;
     SDL_Texture* ringTexture;
 
+    std::vector<Enemy> enemies;
+    SDL_Texture* enemyTexture;
+
+
+    SDL_Texture* backgroundTexture;
     SDL_Texture* walkingTex;
     int currentFrame = 0;
     int frameCounter = 0;
@@ -86,6 +100,7 @@ Sonic::Sonic() {
         return;
     }
 
+    /// creating the surface and texture of the ring
     SDL_Surface* ringSurf = IMG_Load("res/ring.png");
     if (ringSurf == nullptr) {
         cout << SDL_GetError() << endl;
@@ -98,10 +113,42 @@ Sonic::Sonic() {
         return;
     }
 
-    SDL_SetTextureBlendMode(ringTexture, SDL_BLENDMODE_BLEND); /// enable transparency for the ring texture
+    /// creating the surface and texture of the enemy
+    SDL_Surface* enemySurf = IMG_Load("res/enemies.png");
+    if (enemySurf == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+
+    enemyTexture = SDL_CreateTextureFromSurface(ren, enemySurf);
+    if (enemyTexture == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+
+    /// Load background texture
+    SDL_Surface* bgSurf = IMG_Load("res/background.gif");
+    if (bgSurf == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+
+    backgroundTexture = SDL_CreateTextureFromSurface(ren, bgSurf);
+    if (backgroundTexture == nullptr) {
+        cout << SDL_GetError() << endl;
+        return;
+    }
+
+    /// enable transparency for the ring and enemy texture
+    SDL_SetTextureBlendMode(ringTexture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(enemyTexture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(backgroundTexture, SDL_BLENDMODE_BLEND);
+
     /// clean up surface
     SDL_DestroySurface(walkSurf);
     SDL_DestroySurface(ringSurf);
+    SDL_DestroySurface(enemySurf);
+    SDL_DestroySurface(bgSurf);
 
     /// create Box2D world with gravity
     b2WorldDef worldDef = b2DefaultWorldDef();
@@ -126,7 +173,7 @@ Sonic::Sonic() {
     /// create floor body
     b2BodyDef floorBodyDef = b2DefaultBodyDef();
     floorBodyDef.type = b2_staticBody;
-    floorBodyDef.position = {800 / 2 / BOX_SCALE, 600 / BOX_SCALE};
+    floorBodyDef.position = {320 / 2 / BOX_SCALE, 224 / BOX_SCALE};
     b2BodyId floorBody = b2CreateBody(world, &floorBodyDef);
 
     b2Polygon groundBox = b2MakeBox(800 / 2 / BOX_SCALE, 1.0f);
@@ -136,7 +183,7 @@ Sonic::Sonic() {
     for (int i = 0; i < 5; ++i) {
         b2BodyDef ringBodyDef = b2DefaultBodyDef();
         ringBodyDef.type = b2_staticBody;
-        ringBodyDef.position = { (200 + i * 60) / BOX_SCALE, (480) / BOX_SCALE };
+        ringBodyDef.position = {(200 + i * 60) / BOX_SCALE, 480 / BOX_SCALE};
         b2BodyId ringBody = b2CreateBody(world, &ringBodyDef);
 
         Ring ring;
@@ -145,11 +192,27 @@ Sonic::Sonic() {
         ring.animPhase = i * 0.5f;
         rings.push_back(ring);
     }
+
+    /// create enemy
+    b2BodyDef enemyBodyDef = b2DefaultBodyDef();
+    enemyBodyDef.type = b2_kinematicBody;
+    enemyBodyDef.position = {500 / BOX_SCALE, 500 / BOX_SCALE};
+
+    b2BodyId enemyBody = b2CreateBody(world, &enemyBodyDef);
+
+    Enemy enemy;
+    enemy.body = enemyBody;
+    enemy.texRect = {71, 222, 55, 27};
+    enemy.movingRight = true;
+    enemies.push_back(enemy);
+
 }
 
 Sonic::~Sonic() {
     if (walkingTex != nullptr) SDL_DestroyTexture(walkingTex);
     if (ringTexture != nullptr) SDL_DestroyTexture(ringTexture);
+    if (backgroundTexture != nullptr) SDL_DestroyTexture(backgroundTexture);
+    if (enemyTexture != nullptr) SDL_DestroyTexture(enemyTexture);
     if (ren != nullptr) SDL_DestroyRenderer(ren);
     if (win != nullptr) SDL_DestroyWindow(win);
     SDL_Quit();
@@ -158,8 +221,9 @@ Sonic::~Sonic() {
 void Sonic::run() {
     float time = 0.0f;
     SDL_FRect currentTex = SONIC_RUN_TEX;
-    SDL_SetRenderDrawColor(ren, 135, 206, 235, 255);
     SDL_RenderClear(ren);
+    SDL_FRect bgRect = {0, 0, 800, 600};
+    SDL_RenderTexture(ren, backgroundTexture, NULL, &bgRect);
 
     SDL_FRect sonicRect{0, 0, currentTex.w * TEX_SCALE, currentTex.h * TEX_SCALE};
 
@@ -180,6 +244,9 @@ void Sonic::run() {
 
         SDL_RenderClear(ren); /// clear screen each frame
 
+        SDL_FRect bgRect = {0, 0, 800, 600};
+        SDL_RenderTexture(ren, backgroundTexture, NULL, &bgRect);
+
         /// update animation frame every few ticks
         frameCounter++;
         if (frameCounter >= 5) {
@@ -187,7 +254,7 @@ void Sonic::run() {
             frameCounter = 0;
         }
 
-        /// find correct location in sprite sheet
+        /// find correct location of sonic in sprite sheet
         SDL_FRect srcFrameF = {
                 currentTex.x + currentFrame * currentTex.w,
                 currentTex.y,
@@ -195,7 +262,7 @@ void Sonic::run() {
                 currentTex.h
         };
 
-        /// destination rectangle where Sonic will be drawn
+        /// destination rectangle where sonic will be drawn
         SDL_FRect destRect = {
                 sonicRect.x,
                 sonicRect.y,
@@ -207,12 +274,31 @@ void Sonic::run() {
         SDL_RenderTexture(ren, walkingTex, &srcFrameF, &destRect);
 
         /// draw the rings
+        float ringAngle = fmodf(time * 180.0f, 360.0f);
         for (Ring& ring : rings) {
             b2Vec2 pos = b2Body_GetPosition(ring.body);
-            /// add wave offset to Y
             float offsetY = 5.0f * sinf(time + ring.animPhase);
             SDL_FRect dest = { pos.x * BOX_SCALE, (pos.y * BOX_SCALE) + offsetY, ring.texRect.w, ring.texRect.h };
-            SDL_RenderTexture(ren, ringTexture, NULL, &dest);
+            SDL_RenderTextureRotated(ren, ringTexture, NULL, &dest, ringAngle, NULL, SDL_FLIP_NONE);
+        }
+
+        /// draw the enemy
+        for (Enemy& enemy : enemies) {
+            b2Vec2 pos = b2Body_GetPosition(enemy.body);
+            if (pos.x * BOX_SCALE > 300) enemy.movingRight = false;
+            if (pos.x * BOX_SCALE < 200) enemy.movingRight = true;
+
+            b2Vec2 vel = b2Body_GetLinearVelocity(enemy.body);
+            vel.x = enemy.movingRight ? 1.0f : -1.0f;
+            b2Body_SetLinearVelocity(enemy.body, vel);
+        }
+
+        for (Enemy& enemy : enemies) {
+            b2Vec2 pos = b2Body_GetPosition(enemy.body);
+            SDL_FRect src = enemy.texRect;
+            SDL_FRect dest = { pos.x * BOX_SCALE, pos.y * BOX_SCALE, enemy.texRect.w * TEX_SCALE, enemy.texRect.h * TEX_SCALE };
+            SDL_FlipMode flip = enemy.movingRight ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL;
+            SDL_RenderTextureRotated(ren, enemyTexture, &src, &dest, 0.0, NULL, flip);
         }
 
         SDL_RenderPresent(ren); /// present everything to screen
